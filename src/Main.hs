@@ -4,8 +4,6 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
-{-# LANGUAGE OverloadedStrings #-}
-
 module Main where
 
 import qualified Data.ByteString.Lazy.Char8 as BSC
@@ -22,12 +20,7 @@ import Network.HTTP.Media ((//), (/:))
 import Servant.API
 import Servant.Client
 
-import           Data.Aeson.Types                 (parseEither)
-import Data.Attoparsec.ByteString.Char8 (endOfInput, parseOnly,
-                                          skipSpace, (<?>))
-import           Data.String.Conversions          (cs)
-
-{- Format parsing -}
+{- Types and Decoding/Encoding -}
 
 data HTML
 
@@ -43,8 +36,8 @@ instance MimeUnrender HTML Text where
 instance MimeUnrender HTML Version where
   mimeUnrender _ bs = Right $ Version $ pack $ BSC.unpack bs
 
--- TODO: handle this decoding
 instance MimeUnrender HTML Experiments where
+  -- TODO: handle decoding of list of experiments
   mimeUnrender _ bs = Right $ Experiments [pack $ BSC.unpack bs]
 
 data Version = Version {
@@ -59,6 +52,7 @@ instance FromJSON Experiments
 
 data Scalar = Scalar {
   -- TODO : determine expected types for Scalar fields
+  -- for reference see https://github.com/torrvision/crayon/blob/master/client/python/pycrayon/crayon.py
   wallTime :: Double,
   step :: Double,
   value :: Double
@@ -105,17 +99,19 @@ main = do
   testAddExperiment "test_experiment" >> putStrLn ""
 
   putStrLn "List Experiments (again)"
-  testExperiments >> putStrLn "" -- TODO : this doesn't list the added experiment, why?
+  -- TODO : this doesn't list the added experiment, why?
+  testExperiments >> putStrLn ""
 
-  putStrLn "List Scalars" -- TODO: fix 500 status code
+  putStrLn "List Scalars"
   testListScalars "test_experiment" >> putStrLn ""
 
-  putStrLn "Add Scalar" -- TODO: fix 500 status code
-  testAddScalar "test_experiment" "metricFoo" (Scalar (-1.0) (-1.0) 2.0) >> putStrLn ""
+  putStrLn "Add Scalar"
+  -- TODO: fix 500 status code
+  testAddScalar "test_experiment" "metricFoo" (Scalar (-1.0) (-1.0) 2.0)
+    >> putStrLn ""
 
   putStrLn "Delete Experiment"
   testDeleteExperiment "test_experiment" >> putStrLn ""
-
 
 defaultEnv = do
   manager <- (newManager defaultManagerSettings)
@@ -155,6 +151,6 @@ testAddScalar expName metricName scalar = do
     (runClientM $ clientAddScalar (Just expName) (Just metricName) val) env
   handleResult res
 
--- testGetScalar expName = do
---   res <- defaultEnv >>= \env -> (runClientM $ clientDeleteExperiment expName) env
---   handleResult res
+testGetScalar expName = do
+  res <- defaultEnv >>= \env -> (runClientM $ clientDeleteExperiment expName) env
+  handleResult res
