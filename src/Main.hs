@@ -70,12 +70,29 @@ type ManagementAPI =
   :<|> "data" :> ReqBody '[JSON] Text :> Post '[HTML] Text
   :<|> "data" :> QueryParam "xp" Text :> Delete '[HTML] Text
 
-type ScalarAPI = "data" :> "scalars"
-                 :> QueryParam "xp" Text
-                 :> QueryParam "name" Text :> ReqBody '[JSON] [Double] :> Post '[HTML] Text
-  :<|> "data" :> "scalars" :> QueryParam "xp" Text :> Get '[JSON] [Double]
+type ScalarAPI =
+  "data" :> "scalars"
+  :> QueryParam "xp" Text :> QueryParam "name" Text
+  :> ReqBody '[JSON] [Double]
+  :> Post '[HTML] Text
 
-type API = ManagementAPI :<|> ScalarAPI
+  :<|> "data" :> "scalars"
+  :> QueryParam "xp" Text
+  :> QueryParam "name" Text
+  :> Get '[JSON] [Double]
+
+type HistogramAPI =
+
+  "data" :> "histograms"
+  :> QueryParam "xp" Text :> QueryParam "name" Text :> QueryParam "toBuild" Bool
+  :> ReqBody '[JSON] [Double] -- TODO : vary type depending on toBuild value
+  :> Post '[HTML] Text
+
+  :<|> "data" :> "histograms"
+  :> QueryParam "xp" Text :> QueryParam "name" Text
+  :> Get '[JSON] Text -- TODO - build type for histogram json
+
+type API = ManagementAPI :<|> ScalarAPI :<|> HistogramAPI
 
 clientVersion
   :<|> clientExperiments
@@ -85,7 +102,46 @@ clientVersion
 
 clientAddScalar :<|> clientGetScalar = client (Proxy :: Proxy ScalarAPI)
 
+clientAddHistogram :<|> clientGetHistogram = client (Proxy :: Proxy HistogramAPI)
+
 {- Test Client Functions -}
+
+defaultEnv = do
+  manager <- (newManager defaultManagerSettings)
+  pure (ClientEnv manager (BaseUrl Http "localhost" 8889 ""))
+
+handleResult res =
+  case res of
+    Left err -> putStrLn $ "Error: " ++ show err
+    Right x -> print x
+
+runTest clientFun = do
+ res <- (defaultEnv >>= \env -> (runClientM clientFun) env)
+ handleResult res
+
+testVersion :: IO ()
+testVersion = runTest clientVersion
+
+testExperiments :: IO ()
+testExperiments = runTest clientExperiments
+
+testListScalars :: Text -> IO ()
+testListScalars expName = runTest $ clientListScalars (Just expName)
+
+testAddExperiment :: Text -> IO ()
+testAddExperiment expName = runTest $ clientAddExperiment expName
+
+testDeleteExperiment :: Text -> IO ()
+testDeleteExperiment expName = runTest $ clientDeleteExperiment (Just expName)
+
+testAddScalar :: Text -> Text -> Scalar -> IO ()
+testAddScalar expName metricName scalar =
+  runTest $ clientAddScalar (Just expName) (Just metricName) val
+  where val = [wallTime scalar, step scalar, Main.value scalar]
+
+testGetScalar :: Text -> Text -> IO ()
+testGetScalar expName metricName =
+  runTest $ clientGetScalar (Just expName) (Just metricName)
 
 main :: IO ()
 main = do
@@ -110,47 +166,8 @@ main = do
   testAddScalar "test_experiment" "metricFoo" (Scalar (-1.0) (-1.0) 2.0)
     >> putStrLn ""
 
+  putStrLn "Get Scalar"
+  testGetScalar "test_experiment" "metricFoo" >> putStrLn ""
+
   putStrLn "Delete Experiment"
   testDeleteExperiment "test_experiment" >> putStrLn ""
-
-defaultEnv = do
-  manager <- (newManager defaultManagerSettings)
-  pure (ClientEnv manager (BaseUrl Http "localhost" 8889 ""))
-
-handleResult res =
-  case res of
-    Left err -> putStrLn $ "Error: " ++ show err
-    Right x -> print x
-
-testVersion :: IO ()
-testVersion = do
-  res <- (defaultEnv >>= \env -> (runClientM clientVersion) env)
-  handleResult res
-
-testExperiments :: IO ()
-testExperiments = do
-  res <- defaultEnv >>= \env -> (runClientM clientExperiments) env
-  handleResult res
-
-testListScalars expName = do
-  res <- defaultEnv >>= \env -> (runClientM $ clientListScalars (Just expName)) env
-  handleResult res
-
-testAddExperiment expName = do
-  res <- defaultEnv >>= \env -> (runClientM $ clientAddExperiment expName) env
-  handleResult res
-
-testDeleteExperiment expName = do
-  res <- defaultEnv >>= \env ->
-    (runClientM $ clientDeleteExperiment (Just expName)) env
-  handleResult res
-
-testAddScalar expName metricName scalar = do
-  let val = [wallTime scalar, step scalar, Main.value scalar]
-  res <- defaultEnv >>= \env ->
-    (runClientM $ clientAddScalar (Just expName) (Just metricName) val) env
-  handleResult res
-
-testGetScalar expName = do
-  res <- defaultEnv >>= \env -> (runClientM $ clientDeleteExperiment expName) env
-  handleResult res
