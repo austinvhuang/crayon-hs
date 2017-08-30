@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances #-} -- instances with lists
 
 module Main where
 
@@ -20,6 +20,7 @@ import Network.HTTP.Client (newManager, defaultManagerSettings)
 import Network.HTTP.Media ((//), (/:))
 import Servant.API
 import Servant.Client
+import Servant.API.ContentTypes (eitherDecodeLenient)
 
 {- Types and Decoding/Encoding -}
 
@@ -37,30 +38,15 @@ instance MimeUnrender HTML Text where
 instance MimeUnrender HTML Version where
   mimeUnrender _ bs = Right $ Version $ pack $ BSC.unpack bs
 
-instance MimeUnrender HTML Experiments where
-  -- TODO: handle decoding of list of experiments
-  mimeUnrender _ bs = Right $ Experiments [pack $ BSC.unpack bs]
+instance MimeUnrender HTML [Text] where
+  mimeUnrender _ bs = (eitherDecodeLenient bs) :: Either String [Text]
 
-instance MimeUnrender HTML Double where
-  -- TODO: handle decoding of list of experiments
-  -- mimeUnrender _ bs = Right $ Experiments [pack $ BSC.unpack bs]
-  mimeUnrender _ bs = Right $ 1.0
-
--- [[Double]] here requires flexible instances
 instance MimeUnrender HTML [(Double, Int, Double)] where
-  -- TODO: handle decoding of list of experiments
-  -- mimeUnrender _ bs = Right $ Experiments [pack $ BSC.unpack bs]
-  mimeUnrender _ bs = Right $ ([(1.0, 1, 1.0)] :: [(Double, Int, Double)]) -- Dummy value
+  mimeUnrender _ bs = (eitherDecodeLenient bs) :: Either String [(Double, Int, Double)]
 
 data Version = Version {
   version :: Text
   } deriving (Show, Generic)
-
-data Experiments = Experiments {
-  experiments :: [Text]
-  } deriving (Show, Generic)
-
-instance FromJSON Experiments
 
 data Scalar = Scalar {
   wallTime :: Double,
@@ -75,7 +61,7 @@ instance ToJSON Scalar
 
 type ManagementAPI =
   Get '[HTML] Version
-  :<|> "data" :> Get '[HTML] Experiments
+  :<|> "data" :> Get '[HTML] [Text]
   :<|> "data" :> QueryParam "xp" Text :> Get '[HTML] Text
   :<|> "data" :> ReqBody '[JSON] Text :> Post '[HTML] Text
   :<|> "data" :> QueryParam "xp" Text :> Delete '[HTML] Text
@@ -89,8 +75,7 @@ type ScalarAPI =
   :<|> "data" :> "scalars"
   :> QueryParam "xp" Text
   :> QueryParam "name" Text
-  --  :> Get '[HTML] [(Double, Int, Double)]
-  :> Get '[HTML] Text -- TODO - replace with parsed value
+  :> Get '[HTML] [(Double, Int, Double)]
 
 
 type HistogramAPI =
@@ -173,7 +158,7 @@ main = do
   testListExperiments
 
   putStrLn "Experiment Info"
-  testListScalars "test_experiment"
+  testListScalars "test_experiment1"
 
   putStrLn "Add Scalar"
   testAddScalar "test_experiment1" "foo" (Scalar 1.0 1 2.0)
