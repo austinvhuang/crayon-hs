@@ -49,7 +49,12 @@ instance MimeUnrender HTML [[(Double, Int, [Double])]] where
   mimeUnrender _ bs =
     (eitherDecodeLenient bs) :: Either String [[(Double, Int, [Double])]]
 
-
+-- Raw tuple representation of histogram data
+type HistTuple = [(Double, Int, (Double, Double, Double, Double, Double,
+                                 [Double], [Double]))]
+instance MimeUnrender HTML HistTuple where
+  mimeUnrender _ bs =
+    (eitherDecodeLenient bs) :: Either String HistTuple
 
 data Version = Version {
   version :: Text
@@ -69,12 +74,13 @@ data HistValues = HistValues [Double]
                     hmin :: Double,
                     hmax :: Double,
                     hnum :: Int,
-                    hbucketLimit :: Int,
-                    hbucket :: [Int],
+                    hbucketLimit :: [Double],
+                    hbucket :: [Double],
                     hsum :: Maybe Double,
                     hsumSquares :: Maybe Double
                     } deriving (Show, Generic)
 
+instance FromJSON HistValues
 instance ToJSON HistValues
 
 data Histogram =
@@ -84,7 +90,28 @@ data Histogram =
   hvalue :: HistValues
   } deriving (Show, Generic)
 
+instance FromJSON Histogram
+-- TODO - derive this manually according to list formatting
+-- derived from:
+-- https://github.com/torrvision/crayon/blob/master/doc/specs.md#histogram-data
 instance ToJSON Histogram
+
+-- data HistQueryDatum {
+--   hqmin :: Double,
+--   hqmax :: Double,
+--   hqnum :: Int,
+--   hqsum :: Double,
+--   hqsumSquares :: Double,
+--   hqbucketLimit :: [Double],
+--   hqbucket :: [Int],
+--     } deriving (Show, Generic)
+
+-- data HistQuery =
+--   HistQuery {
+--   hqtime :: Double,
+--   hqstep :: Int,
+--   hqvalue :: HistValues
+--   }
 
 {- Specify Crayon API and Generate Client Functions -}
 
@@ -116,7 +143,7 @@ type HistogramAPI =
 
   :<|> "data" :> "histograms"
   :> QueryParam "xp" Text :> QueryParam "name" Text
-  :> Get '[HTML] Text -- TODO - replace with spec json definition
+  :> Get '[HTML] HistTuple -- TODO: replace with parse into ADT
 
 type API = ManagementAPI :<|> ScalarAPI :<|> HistogramAPI
 
@@ -244,8 +271,8 @@ main = do
   putStrLn "List Experiments (shows 2/2 experiments)"
   testListExperiments
 
-  -- putStrLn "Delete Experiment"
-  -- testDeleteExperiment "test_experiment1"
+  putStrLn "Delete Experiment"
+  testDeleteExperiment "test_experiment1"
 
-  -- putStrLn "Delete Experiment"
-  -- testDeleteExperiment "test_experiment2"
+  putStrLn "Delete Experiment"
+  testDeleteExperiment "test_experiment2"
