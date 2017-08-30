@@ -33,16 +33,23 @@ instance MimeRender HTML Text where
   mimeRender _ = BSC.pack . T.unpack
 
 instance MimeUnrender HTML Text where
-  mimeUnrender _ bs = Right $ pack $ BSC.unpack bs
+  mimeUnrender _ bs = Right . pack . BSC.unpack $ bs
 
 instance MimeUnrender HTML Version where
-  mimeUnrender _ bs = Right $ Version $ pack $ BSC.unpack bs
+  mimeUnrender _ bs = Right . Version . pack . BSC.unpack $ bs
 
 instance MimeUnrender HTML [Text] where
   mimeUnrender _ bs = (eitherDecodeLenient bs) :: Either String [Text]
 
 instance MimeUnrender HTML [(Double, Int, Double)] where
-  mimeUnrender _ bs = (eitherDecodeLenient bs) :: Either String [(Double, Int, Double)]
+  mimeUnrender _ bs =
+    (eitherDecodeLenient bs) :: Either String [(Double, Int, Double)]
+
+instance MimeUnrender HTML [[(Double, Int, [Double])]] where
+  mimeUnrender _ bs =
+    (eitherDecodeLenient bs) :: Either String [[(Double, Int, [Double])]]
+
+
 
 data Version = Version {
   version :: Text
@@ -57,7 +64,29 @@ data Scalar = Scalar {
 instance FromJSON Scalar
 instance ToJSON Scalar
 
-{- Specify Crayon and Generate Client Functions -}
+data HistValues = HistValues [Double]
+                | HistSpec {
+                    hmin :: Double,
+                    hmax :: Double,
+                    hnum :: Int,
+                    hbucketLimit :: Int,
+                    hbucket :: [Int],
+                    hsum :: Maybe Double,
+                    hsumSquares :: Maybe Double
+                    } deriving (Show, Generic)
+
+instance ToJSON HistValues
+
+data Histogram =
+  Histogram {
+  htime :: Double,
+  hstep :: Int,
+  hvalue :: HistValues
+  } deriving (Show, Generic)
+
+instance ToJSON Histogram
+
+{- Specify Crayon API and Generate Client Functions -}
 
 type ManagementAPI =
   Get '[HTML] Version
@@ -77,17 +106,17 @@ type ScalarAPI =
   :> QueryParam "name" Text
   :> Get '[HTML] [(Double, Int, Double)]
 
-
 type HistogramAPI =
 
   "data" :> "histograms"
-  :> QueryParam "xp" Text :> QueryParam "name" Text :> QueryParam "toBuild" Bool
-  :> ReqBody '[JSON] [Double] -- TODO : vary type depending on toBuild value
+  :> QueryParam "xp" Text :> QueryParam "name" Text :> QueryParam "tobuild" Bool
+  :> ReqBody '[JSON] (Double, Int, [Double])
+  -- TODO - allow HistSpec to be passed
   :> Post '[HTML] Text
 
   :<|> "data" :> "histograms"
   :> QueryParam "xp" Text :> QueryParam "name" Text
-  :> Get '[JSON] [[Double]] -- TODO - build type for histogram json
+  :> Get '[HTML] Text -- TODO - replace with spec json definition
 
 type API = ManagementAPI :<|> ScalarAPI :<|> HistogramAPI
 
@@ -109,7 +138,7 @@ defaultEnv = do
 
 handleResult res =
   case res of
-    Left err -> putStrLn $ "Error: " ++ show err
+    Left err -> (putStrLn $ "Error: " ++ show err) >> putStrLn ""
     Right x -> print x >> putStrLn ""
 
 runTest clientFun = do
@@ -139,6 +168,22 @@ testAddScalar expName metricName scalar =
 testGetScalar :: Text -> Text -> IO ()
 testGetScalar expName metricName =
   runTest $ clientGetScalar (Just expName) (Just metricName)
+
+testAddHistogram :: Text -> Text -> Histogram -> IO ()
+testAddHistogram expName metricName histval =
+  case hv of
+    HistValues hvList ->
+      runTest $ clientAddHistogram (Just expName) (Just metricName) (Just True) (ht, hs, hvList)
+    _ -> -- TODO dummy value for now for HistSpec constructor
+      runTest $ clientAddHistogram (Just expName) (Just metricName) (Just False) (ht, hs, [])
+  where
+    ht = htime histval
+    hs = hstep histval
+    hv = hvalue histval
+
+testGetHistogram :: Text -> Text -> IO ()
+testGetHistogram expName metricName =
+  runTest $ clientGetHistogram (Just expName) (Just metricName)
 
 main :: IO ()
 main = do
@@ -172,6 +217,24 @@ main = do
   putStrLn "Get Scalar"
   testGetScalar "test_experiment1" "foo"
 
+  putStrLn "Add Histogram"
+  testAddHistogram "test_experiment1" "hfoo"
+    (Histogram 1.0 1 (HistValues [1.0, 1.0, 2.0, 3.0, 3.0, 3.0]))
+
+  putStrLn "Add Histogram"
+  testAddHistogram "test_experiment1" "hfoo"
+    (Histogram 1.0 1 (HistValues [1.0, 1.0, 3.0, 3.0, 3.0, 3.0]))
+
+  putStrLn "Add Histogram"
+  testAddHistogram "test_experiment1" "hfoo2"
+    (Histogram 1.0 1 (HistValues [3.0]))
+
+  putStrLn "Get Histogram"
+  testGetHistogram "test_experiment1" "hfoo"
+
+  putStrLn "Get Histogram"
+  testGetHistogram "test_experiment1" "hfoo2"
+
   putStrLn "List Experiments (shows 1/2 experiments)"
   testListExperiments
 
@@ -181,8 +244,8 @@ main = do
   putStrLn "List Experiments (shows 2/2 experiments)"
   testListExperiments
 
-  putStrLn "Delete Experiment"
-  testDeleteExperiment "test_experiment1"
+  -- putStrLn "Delete Experiment"
+  -- testDeleteExperiment "test_experiment1"
 
-  putStrLn "Delete Experiment"
-  testDeleteExperiment "test_experiment2"
+  -- putStrLn "Delete Experiment"
+  -- testDeleteExperiment "test_experiment2"
