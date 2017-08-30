@@ -3,6 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Main where
 
@@ -40,6 +41,17 @@ instance MimeUnrender HTML Experiments where
   -- TODO: handle decoding of list of experiments
   mimeUnrender _ bs = Right $ Experiments [pack $ BSC.unpack bs]
 
+instance MimeUnrender HTML Double where
+  -- TODO: handle decoding of list of experiments
+  -- mimeUnrender _ bs = Right $ Experiments [pack $ BSC.unpack bs]
+  mimeUnrender _ bs = Right $ 1.0
+
+-- [[Double]] here requires flexible instances
+instance MimeUnrender HTML [(Double, Int, Double)] where
+  -- TODO: handle decoding of list of experiments
+  -- mimeUnrender _ bs = Right $ Experiments [pack $ BSC.unpack bs]
+  mimeUnrender _ bs = Right $ ([(1.0, 1, 1.0)] :: [(Double, Int, Double)]) -- Dummy value
+
 data Version = Version {
   version :: Text
   } deriving (Show, Generic)
@@ -51,10 +63,8 @@ data Experiments = Experiments {
 instance FromJSON Experiments
 
 data Scalar = Scalar {
-  -- TODO : determine expected types for Scalar fields
-  -- for reference see https://github.com/torrvision/crayon/blob/master/client/python/pycrayon/crayon.py
   wallTime :: Double,
-  step :: Double,
+  step :: Int, -- Int required, double returns 500 Error
   value :: Double
   } deriving (Show, Generic)
 
@@ -73,13 +83,15 @@ type ManagementAPI =
 type ScalarAPI =
   "data" :> "scalars"
   :> QueryParam "xp" Text :> QueryParam "name" Text
-  :> ReqBody '[JSON] [Double]
+  :> ReqBody '[JSON] (Double, Int, Double)
   :> Post '[HTML] Text
 
   :<|> "data" :> "scalars"
   :> QueryParam "xp" Text
   :> QueryParam "name" Text
-  :> Get '[JSON] [Double]
+  --  :> Get '[HTML] [(Double, Int, Double)]
+  :> Get '[HTML] Text -- TODO - replace with parsed value
+
 
 type HistogramAPI =
 
@@ -90,13 +102,13 @@ type HistogramAPI =
 
   :<|> "data" :> "histograms"
   :> QueryParam "xp" Text :> QueryParam "name" Text
-  :> Get '[JSON] Text -- TODO - build type for histogram json
+  :> Get '[JSON] [[Double]] -- TODO - build type for histogram json
 
 type API = ManagementAPI :<|> ScalarAPI :<|> HistogramAPI
 
 clientVersion
   :<|> clientExperiments
-  :<|> clientListScalars
+  :<|> clientExperimentInfo
   :<|> clientAddExperiment
   :<|> clientDeleteExperiment = client (Proxy :: Proxy ManagementAPI)
 
@@ -122,11 +134,11 @@ runTest clientFun = do
 testVersion :: IO ()
 testVersion = runTest clientVersion
 
-testExperiments :: IO ()
-testExperiments = runTest clientExperiments
+testListExperiments :: IO ()
+testListExperiments = runTest clientExperiments
 
 testListScalars :: Text -> IO ()
-testListScalars expName = runTest $ clientListScalars (Just expName)
+testListScalars expName = runTest $ clientExperimentInfo (Just expName)
 
 testAddExperiment :: Text -> IO ()
 testAddExperiment expName = runTest $ clientAddExperiment expName
@@ -137,7 +149,7 @@ testDeleteExperiment expName = runTest $ clientDeleteExperiment (Just expName)
 testAddScalar :: Text -> Text -> Scalar -> IO ()
 testAddScalar expName metricName scalar =
   runTest $ clientAddScalar (Just expName) (Just metricName) val
-  where val = [wallTime scalar, step scalar, Main.value scalar]
+  where val = (wallTime scalar, step scalar, Main.value scalar)
 
 testGetScalar :: Text -> Text -> IO ()
 testGetScalar expName metricName =
@@ -149,25 +161,26 @@ main = do
   testVersion >> putStrLn ""
 
   putStrLn "List Experiments"
-  testExperiments >> putStrLn ""
+  testListExperiments >> putStrLn ""
 
   putStrLn "Add Experiment"
   testAddExperiment "test_experiment" >> putStrLn ""
 
-  putStrLn "List Experiments (again)"
-  -- TODO : this doesn't list the added experiment, why?
-  testExperiments >> putStrLn ""
+  putStrLn "List Experiments (known crayon bug - doesn't show empty experiments)"
+  testListExperiments >> putStrLn ""
 
-  putStrLn "List Scalars"
+  putStrLn "Experiment Info"
   testListScalars "test_experiment" >> putStrLn ""
 
   putStrLn "Add Scalar"
-  -- TODO: fix 500 status code
-  testAddScalar "test_experiment" "metricFoo" (Scalar (-1.0) (-1.0) 2.0)
+  testAddScalar "test_experiment" "foo" (Scalar (1.0) 1 2.0)
     >> putStrLn ""
 
   putStrLn "Get Scalar"
-  testGetScalar "test_experiment" "metricFoo" >> putStrLn ""
+  testGetScalar "test_experiment" "foo" >> putStrLn ""
+
+  putStrLn "List Experiments (again)"
+  testListExperiments >> putStrLn ""
 
   putStrLn "Delete Experiment"
   testDeleteExperiment "test_experiment" >> putStrLn ""
