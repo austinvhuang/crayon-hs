@@ -125,7 +125,7 @@ defaultEnv = do
 handleResult res =
   case res of
     Left err -> putStrLn $ "Error: " ++ show err
-    Right x -> print x
+    Right x -> print x >> putStrLn ""
 
 runTest clientFun = do
  res <- (defaultEnv >>= \env -> (runClientM clientFun) env)
@@ -158,29 +158,46 @@ testGetScalar expName metricName =
 main :: IO ()
 main = do
   putStrLn "Version"
-  testVersion >> putStrLn ""
+  testVersion
 
   putStrLn "List Experiments"
-  testListExperiments >> putStrLn ""
+  testListExperiments
 
   putStrLn "Add Experiment"
-  testAddExperiment "test_experiment" >> putStrLn ""
+  testAddExperiment "test_experiment1"
+
+  putStrLn "Add Experiment"
+  testAddExperiment "test_experiment2"
 
   putStrLn "List Experiments (known crayon bug - doesn't show empty experiments)"
-  testListExperiments >> putStrLn ""
+  testListExperiments
 
   putStrLn "Experiment Info"
-  testListScalars "test_experiment" >> putStrLn ""
+  testListScalars "test_experiment"
 
   putStrLn "Add Scalar"
-  testAddScalar "test_experiment" "foo" (Scalar (1.0) 1 2.0)
-    >> putStrLn ""
+  testAddScalar "test_experiment1" "foo" (Scalar 1.0 1 2.0)
+
+  putStrLn "Add Scalar"
+  testAddScalar "test_experiment1" "foo" (Scalar 2.5 2 4.0)
+
+  putStrLn "Add Scalar"
+  testAddScalar "test_experiment1" "foo" (Scalar 2.6 3 1.0)
 
   putStrLn "Get Scalar"
-  testGetScalar "test_experiment" "foo" >> putStrLn ""
+  testGetScalar "test_experiment1" "foo"
 
-  putStrLn "List Experiments (again)"
-  testListExperiments >> putStrLn ""
+  putStrLn "List Experiments (shows 1/2 experiments)"
+  testListExperiments
+
+  putStrLn "Add Scalar"
+  testAddScalar "test_experiment2" "foobar" (Scalar 0.0 1 1.0)
+
+  putStrLn "List Experiments (shows 2/2 experiments)"
+  testListExperiments
 
   putStrLn "Delete Experiment"
-  testDeleteExperiment "test_experiment" >> putStrLn ""
+  testDeleteExperiment "test_experiment1"
+
+  putStrLn "Delete Experiment"
+  testDeleteExperiment "test_experiment2"
