@@ -96,23 +96,6 @@ instance FromJSON Histogram
 -- https://github.com/torrvision/crayon/blob/master/doc/specs.md#histogram-data
 instance ToJSON Histogram
 
--- data HistQueryDatum {
---   hqmin :: Double,
---   hqmax :: Double,
---   hqnum :: Int,
---   hqsum :: Double,
---   hqsumSquares :: Double,
---   hqbucketLimit :: [Double],
---   hqbucket :: [Int],
---     } deriving (Show, Generic)
-
--- data HistQuery =
---   HistQuery {
---   hqtime :: Double,
---   hqstep :: Int,
---   hqvalue :: HistValues
---   }
-
 {- Specify Crayon API and Generate Client Functions -}
 
 type ManagementAPI =
