@@ -4,6 +4,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-} -- instances with lists
+{-# LANGUAGE FlexibleContexts #-}
 
 module Main where
 
@@ -16,6 +17,8 @@ import Data.Aeson
 import Data.Aeson.Parser
 import Data.Proxy
 import GHC.Generics
+import Control.Lens
+import Control.Lens.Tuple -- would use micro, but tuple accessors too limited
 import Network.HTTP.Client (newManager, defaultManagerSettings)
 import Network.HTTP.Media ((//), (/:))
 import Servant.API
@@ -50,11 +53,36 @@ instance MimeUnrender HTML [[(Double, Int, [Double])]] where
     (eitherDecodeLenient bs) :: Either String [[(Double, Int, [Double])]]
 
 -- Raw tuple representation of histogram data
-type HistTuple = [(Double, Int, (Double, Double, Double, Double, Double,
-                                 [Double], [Double]))]
-instance MimeUnrender HTML HistTuple where
+type HistTuple = (Double, Int, (Double, Double, Int, Double, Double,
+                                 [Double], [Double]))
+instance MimeUnrender HTML [HistTuple] where
   mimeUnrender _ bs =
-    (eitherDecodeLenient bs) :: Either String HistTuple
+    (eitherDecodeLenient bs) :: Either String [HistTuple]
+
+instance MimeUnrender HTML [Histogram] where
+  mimeUnrender _ bs = case parse of
+                        Right tupList -> Right $ fmap tuple2hist tupList
+                        Left err -> Left err
+    where parse = (eitherDecodeLenient bs) :: Either String [HistTuple]
+
+tuple2hist :: HistTuple -> Histogram
+tuple2hist tup = Histogram {
+  htime = tup ^. _1,
+  hstep = tup ^. _2,
+  hvalue = HistSpec {
+      hmin = tup ^. _3 ^. _1,
+      hmax = tup ^. _3 ^. _2,
+      hnum = tup ^. _3 ^. _3,
+      hsum = Just $ tup ^. _3 ^. _4,
+      hsumSquares = Just $ tup ^. _3 ^. _5,
+      hbucketLimit = tup ^. _3 ^. _6,
+      hbucket = tup ^. _3 ^. _7
+      }
+  }
+
+-- instance MimeUnrender HTML [Histogram] where
+--   mimeUnrender _ bs =
+--     where ht = (eitherDecodeLenient bs) :: Either String HistTuple
 
 data Version = Version {
   version :: Text
@@ -91,9 +119,6 @@ data Histogram =
   } deriving (Show, Generic)
 
 instance FromJSON Histogram
--- TODO - derive this manually according to list formatting
--- derived from:
--- https://github.com/torrvision/crayon/blob/master/doc/specs.md#histogram-data
 instance ToJSON Histogram
 
 {- Specify Crayon API and Generate Client Functions -}
@@ -126,7 +151,7 @@ type HistogramAPI =
 
   :<|> "data" :> "histograms"
   :> QueryParam "xp" Text :> QueryParam "name" Text
-  :> Get '[HTML] HistTuple -- TODO: replace with parse into ADT
+  :> Get '[HTML] [Histogram]
 
 type API = ManagementAPI :<|> ScalarAPI :<|> HistogramAPI
 

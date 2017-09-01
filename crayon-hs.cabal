@@ -23,6 +23,7 @@ executable crayon-hs
                      , aeson >= 1.1.2.0
                      , http-client >= 0.5.7.0
                      , http-media >= 0.7.1.1
+                     , lens >= 4.15.4
                      , servant >= 0.11
                      , servant-client >= 0.11
                      , string-conversions >= 0.4
