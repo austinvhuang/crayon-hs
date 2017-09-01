@@ -50,7 +50,6 @@ instance MimeUnrender HTML [[(Double, Int, [Double])]] where
   mimeUnrender _ bs =
     (eitherDecodeLenient bs) :: Either String [[(Double, Int, [Double])]]
 
--- Raw tuple representation of histogram data
 type HistTuple = (Double, Int, (Double, Double, Int, Double, Double,
                                  [Double], [Double]))
 instance MimeUnrender HTML [HistTuple] where
@@ -156,4 +155,3 @@ clientVersion
 clientAddScalar :<|> clientGetScalar = client (Proxy :: Proxy ScalarAPI)
 
 clientAddHistogram :<|> clientGetHistogram = client (Proxy :: Proxy HistogramAPI)
-

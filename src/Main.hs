@@ -3,32 +3,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleInstances #-} -- instances with lists
-{-# LANGUAGE FlexibleContexts #-}
 
 module Main where
 
-import Data.Aeson
-import Data.Aeson.Parser
-import qualified Data.ByteString.Lazy.Char8 as BSC
-import qualified Data.ByteString.Lazy as BS
 import Data.Text
-import qualified Data.Text as T
-import Data.Text.Encoding
-import Data.Proxy
-import GHC.Generics
-import Control.Lens
-import Control.Lens.Tuple
 import Network.HTTP.Client (newManager, defaultManagerSettings)
-import Network.HTTP.Media ((//), (/:))
-import Servant.API
 import Servant.Client
-import Servant.API.ContentTypes (eitherDecodeLenient)
 import Test.Hspec
 
 import API
 
-{- Test Client Functions -}
+{- Convenience functioins -}
 
 defaultEnv = do
   manager <- (newManager defaultManagerSettings)
@@ -42,6 +27,8 @@ handleResult res =
 runTest clientFun = do
  res <- (defaultEnv >>= \env -> (runClientM clientFun) env)
  handleResult res
+
+{- Test functions for client -}
 
 testVersion :: IO ()
 testVersion = runTest clientVersion
