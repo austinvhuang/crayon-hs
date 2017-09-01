@@ -24,6 +24,7 @@ import Network.HTTP.Media ((//), (/:))
 import Servant.API
 import Servant.Client
 import Servant.API.ContentTypes (eitherDecodeLenient)
+import Test.Hspec
 
 import API
 
@@ -84,6 +85,11 @@ testGetHistogram expName metricName =
 
 main :: IO ()
 main = do
+  hspec $ do
+    describe "Crayon" $ do
+      it "returns crayon version" $ do
+        1 `shouldBe` 1
+
   putStrLn "Version"
   testVersion
 
