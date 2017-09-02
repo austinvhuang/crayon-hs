@@ -6,6 +6,7 @@
 
 module Main where
 
+import Data.Either (isRight)
 import Data.Text
 import Network.HTTP.Client (newManager, defaultManagerSettings)
 import Servant.Client
@@ -21,121 +22,114 @@ defaultEnv = do
 
 handleResult res =
   case res of
-    Left err -> (putStrLn $ "Error: " ++ show err) >> putStrLn ""
-    Right x -> print x >> putStrLn ""
+    Left err -> (putStrLn $ "Error: " ++ show err) >> putStrLn "" >> (pure $ Left err)
+    Right x -> print x >> putStrLn "" >> (pure $ Right x)
 
 runTest clientFun = do
  res <- (defaultEnv >>= \env -> (runClientM clientFun) env)
  handleResult res
 
-{- Test functions for client -}
-
-testVersion :: IO ()
 testVersion = runTest clientVersion
 
-testListExperiments :: IO ()
 testListExperiments = runTest clientExperiments
 
-testListScalars :: Text -> IO ()
 testListScalars expName = runTest $ clientExperimentInfo (Just expName)
 
-testAddExperiment :: Text -> IO ()
 testAddExperiment expName = runTest $ clientAddExperiment expName
 
-testDeleteExperiment :: Text -> IO ()
 testDeleteExperiment expName = runTest $ clientDeleteExperiment (Just expName)
 
-testAddScalar :: Text -> Text -> Scalar -> IO ()
 testAddScalar expName metricName scalar =
   runTest $ clientAddScalar (Just expName) (Just metricName) val
   where val = (wallTime scalar, step scalar, API.value scalar)
 
-testGetScalar :: Text -> Text -> IO ()
 testGetScalar expName metricName =
   runTest $ clientGetScalar (Just expName) (Just metricName)
 
-testAddHistogram :: Text -> Text -> Histogram -> IO ()
 testAddHistogram expName metricName histval =
   case hv of
-    HistValues hvList ->
-      runTest $ clientAddHistogram (Just expName) (Just metricName) (Just True) (ht, hs, hvList)
-    _ -> -- TODO dummy value for now for HistSpec constructor
-      runTest $ clientAddHistogram (Just expName) (Just metricName) (Just False) (ht, hs, [])
+    HistValues hvList -> runTest $ clientAddHistogram (Just expName) (Just metricName) (Just True) (ht, hs, hvList)
+    _ -> runTest $ clientAddHistogram (Just expName) (Just metricName) (Just False) (ht, hs, []) -- TODO dummy value for now for HistSpec constructor
   where
     ht = htime histval
     hs = hstep histval
     hv = hvalue histval
 
-testGetHistogram :: Text -> Text -> IO ()
 testGetHistogram expName metricName =
   runTest $ clientGetHistogram (Just expName) (Just metricName)
 
-main :: IO ()
+-- main :: IO ()
 main = do
   hspec $ do
     describe "Crayon" $ do
       it "returns crayon version" $ do
-        1 `shouldBe` 1
+        v <- testVersion
+        v `shouldBe` Right Version {version = ("0.5" :: Text)}
 
-  putStrLn "Version"
-  testVersion
+  -- experiments
+      it "initially returns an empty list of experiments" $ do
+        lst <- testListExperiments
+        lst `shouldBe` Right []
+      it "allows adding test_experiment1" $ do
+        res <- testAddExperiment "test_experiment1"
+        res `shouldBe` Right "ok"
+      it "allows adding test_experiment2" $ do
+        res <- testAddExperiment "test_experiment2"
+        res `shouldBe` Right "ok"
+      it "lists no experiments prior to adding data (known crayon bug)" $ do
+        lst <- testListExperiments
+        lst `shouldBe` Right []
 
-  putStrLn "List Experiments"
-  testListExperiments
+  -- scalars
+      it "lists scalars for experiment 1 (TODO parse this properly)" $ do
+        lst <- testListScalars "test_experiment1"
+        lst `shouldBe` Right "{\"histograms\": [], \"scalars\": []}"
+      it "allows adding a scalar value" $ do
+        res <- testAddScalar "test_experiment1" "foo" (Scalar 1.0 1 2.0)
+        res `shouldBe` Right "ok"
+      it "allows adding another scalar value" $ do
+        res <- testAddScalar "test_experiment1" "foo" (Scalar 2.5 2 4.0)
+        res `shouldBe` Right "ok"
+      it "allows adding another scalar value" $ do
+        res <- testAddScalar "test_experiment1" "foo" (Scalar 2.6 3 1.0)
+        res `shouldBe` Right "ok"
+      it "allows getting a scalar varibale" $ do
+        res <- testGetScalar "test_experiment1" "foo"
+        res `shouldBe` Right [(1.0,1,2.0),(2.5,2,4.0),(2.6,3,1.0)]
 
-  putStrLn "Add Experiment"
-  testAddExperiment "test_experiment1"
+  -- histogramss
+      it "allows adding a histogram" $ do
+        res <- testAddHistogram "test_experiment1" "hfoo"
+          (Histogram 1.0 1 (HistValues [1.0, 1.0, 2.0, 3.0, 3.0, 3.0]))
+        res `shouldBe` Right "ok"
+      it "allows adding another histogram" $ do
+        res <- testAddHistogram "test_experiment1" "hfoo2"
+          (Histogram 1.0 1 (HistValues [3.0]))
+        res `shouldBe` Right "ok"
+      it "allows getting a histogram" $ do
+        res <- testGetHistogram "test_experiment1" "hfoo"
+        print res
+        isRight res `shouldBe` True
+      it "allows getting another histogram" $ do
+        res <- testGetHistogram "test_experiment1" "hfoo2"
+        print res
+        isRight res `shouldBe` True
 
-  putStrLn "Add Experiment"
-  testAddExperiment "test_experiment2"
+  -- quirks of experiment listings
+      it "shows experiment with data in it (1/2 experimernts)" $ do
+        res <- testListExperiments
+        res `shouldBe` Right ["test_experiment1"]
+      it "can add scalar to experiment 2" $ do
+        res <- testAddScalar "test_experiment2" "foobar" (Scalar 0.0 1 1.0)
+        res `shouldBe` Right "ok"
+      it "lists shows 2/2 experiments" $ do
+        res <- testListExperiments
+        res `shouldBe` Right ["test_experiment2","test_experiment1"]
 
-  putStrLn "List Experiments (known crayon bug - doesn't show empty experiments)"
-  testListExperiments
-
-  putStrLn "Experiment Info"
-  testListScalars "test_experiment1"
-
-  putStrLn "Add Scalar"
-  testAddScalar "test_experiment1" "foo" (Scalar 1.0 1 2.0)
-
-  putStrLn "Add Scalar"
-  testAddScalar "test_experiment1" "foo" (Scalar 2.5 2 4.0)
-
-  putStrLn "Add Scalar"
-  testAddScalar "test_experiment1" "foo" (Scalar 2.6 3 1.0)
-
-  putStrLn "Get Scalar"
-  testGetScalar "test_experiment1" "foo"
-
-  putStrLn "Add Histogram"
-  testAddHistogram "test_experiment1" "hfoo"
-    (Histogram 1.0 1 (HistValues [1.0, 1.0, 2.0, 3.0, 3.0, 3.0]))
-
-  putStrLn "Add Histogram"
-  testAddHistogram "test_experiment1" "hfoo"
-    (Histogram 1.0 1 (HistValues [1.0, 1.0, 3.0, 3.0, 3.0, 3.0]))
-
-  putStrLn "Add Histogram"
-  testAddHistogram "test_experiment1" "hfoo2"
-    (Histogram 1.0 1 (HistValues [3.0]))
-
-  putStrLn "Get Histogram"
-  testGetHistogram "test_experiment1" "hfoo"
-
-  putStrLn "Get Histogram"
-  testGetHistogram "test_experiment1" "hfoo2"
-
-  putStrLn "List Experiments (shows 1/2 experiments)"
-  testListExperiments
-
-  putStrLn "Add Scalar"
-  testAddScalar "test_experiment2" "foobar" (Scalar 0.0 1 1.0)
-
-  putStrLn "List Experiments (shows 2/2 experiments)"
-  testListExperiments
-
-  putStrLn "Delete Experiment"
-  testDeleteExperiment "test_experiment1"
-
-  putStrLn "Delete Experiment"
-  testDeleteExperiment "test_experiment2"
+  -- delet experiments
+      it "allows deleting an experiment" $ do
+        res <- testDeleteExperiment "test_experiment1"
+        res `shouldBe` Right "ok"
+      it "allows deleting another experiment" $ do
+        res <- testDeleteExperiment "test_experiment2"
+        res `shouldBe` Right "ok"

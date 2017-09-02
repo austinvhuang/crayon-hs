@@ -77,13 +77,13 @@ tuple2hist tup = Histogram {
 
 data Version = Version {
   version :: Text
-  } deriving (Show, Generic)
+  } deriving (Eq, Generic, Show)
 
 data Scalar = Scalar {
   wallTime :: Double,
   step :: Int,
   value :: Double
-  } deriving (Show, Generic)
+  } deriving (Eq, Generic, Show)
 
 instance FromJSON Scalar
 instance ToJSON Scalar
@@ -97,7 +97,7 @@ data HistValues = HistValues [Double]
                     hbucket :: [Double],
                     hsum :: Maybe Double,
                     hsumSquares :: Maybe Double
-                    } deriving (Show, Generic)
+                    } deriving (Eq, Generic, Show)
 
 instance FromJSON HistValues
 instance ToJSON HistValues
@@ -107,7 +107,7 @@ data Histogram =
   htime :: Double,
   hstep :: Int,
   hvalue :: HistValues
-  } deriving (Show, Generic)
+  } deriving (Eq, Generic, Show)
 
 instance FromJSON Histogram
 instance ToJSON Histogram
